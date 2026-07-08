@@ -18,12 +18,11 @@ workflow BAM_VARIANT_CALLING_DEEPVARIANT {
     intervals     // channel: [mandatory] [ intervals, num_intervals ] or [ [], 0 ] if no intervals
 
     main:
-    versions = Channel.empty()
 
     // Combine cram and intervals for spread and gather strategy
     cram_intervals = cram.combine(intervals)
         // Move num_intervals to meta map
-        .map{ meta, cram, crai, intervals, num_intervals -> [ meta + [ num_intervals:num_intervals ], cram, crai, intervals ]}
+        .map{ meta, cram_, crai, intervals_, num_intervals -> [ meta + [ num_intervals:num_intervals ], cram_, crai, intervals_ ]}
 
     DEEPVARIANT_RUNDEEPVARIANT(cram_intervals, fasta, fasta_fai, [ [ id:'null' ], [] ], [ [ id:'null' ], [] ])
 
@@ -48,6 +47,13 @@ workflow BAM_VARIANT_CALLING_DEEPVARIANT {
     MERGE_DEEPVARIANT_GVCF(gvcf_to_merge, dict)
     MERGE_DEEPVARIANT_VCF(vcf_to_merge, dict)
 
+    // Figuring out if there is one or more tbi(s) from the same sample
+    tbi_out = DEEPVARIANT_RUNDEEPVARIANT.out.vcf_index.branch{
+        // Use meta.num_intervals to asses number of intervals
+        intervals:    it[0].num_intervals > 1
+        no_intervals: it[0].num_intervals <= 1
+    }
+
     // Mix intervals and no_intervals channels together
     gvcf = Channel.empty().mix(MERGE_DEEPVARIANT_GVCF.out.vcf, gvcf_out.no_intervals)
         // add variantcaller to meta map and remove no longer necessary field: num_intervals
@@ -58,13 +64,13 @@ workflow BAM_VARIANT_CALLING_DEEPVARIANT {
         // add variantcaller to meta map and remove no longer necessary field: num_intervals
         .map{ meta, vcf -> [ meta - meta.subMap('num_intervals') + [ variantcaller:'deepvariant' ], vcf ] }
 
-    versions = versions.mix(DEEPVARIANT_RUNDEEPVARIANT.out.versions)
-    versions = versions.mix(MERGE_DEEPVARIANT_GVCF.out.versions)
-    versions = versions.mix(MERGE_DEEPVARIANT_VCF.out.versions)
+    tbi = Channel.empty().mix(MERGE_DEEPVARIANT_VCF.out.tbi, tbi_out.no_intervals)
+        // add variantcaller to meta map and remove no longer necessary field: num_intervals
+        .map{ meta, tbi -> [ meta - meta.subMap('num_intervals') + [ variantcaller:'deepvariant' ], tbi ] }
+
 
     emit:
     gvcf
     vcf
-
-    versions
+    tbi
 }

@@ -19,8 +19,8 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_MANTA {
 
     // Combine cram and intervals, account for 0 intervals
     cram_intervals = cram.combine(intervals).map{ it ->
-        bed_gz = it.size() > 3 ? it[3] : []
-        bed_tbi = it.size() > 3 ? it[4] : []
+        def bed_gz = it.size() > 3 ? it[3] : []
+        def bed_tbi = it.size() > 3 ? it[4] : []
 
         [it[0], it[1], it[2], bed_gz, bed_tbi]
     }
@@ -30,15 +30,18 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_MANTA {
     small_indels_vcf = MANTA_TUMORONLY.out.candidate_small_indels_vcf
     candidate_sv_vcf = MANTA_TUMORONLY.out.candidate_sv_vcf
     tumor_sv_vcf = MANTA_TUMORONLY.out.tumor_sv_vcf
+    tumor_sv_vcf_tbi = MANTA_TUMORONLY.out.tumor_sv_vcf_tbi
 
     // Only tumor sv should get annotated
     // add variantcaller to meta map
     vcf = tumor_sv_vcf.map{ meta, vcf -> [ meta + [ variantcaller:'manta' ], vcf ] }
+    tbi = tumor_sv_vcf_tbi.map{ meta, tbi -> [ meta + [ variantcaller:'manta' ], tbi ] }
 
     versions = versions.mix(MANTA_TUMORONLY.out.versions)
 
     emit:
     vcf
+    tbi
 
     versions
 }
